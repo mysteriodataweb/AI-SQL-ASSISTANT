@@ -136,7 +136,11 @@ export function Sidebar({
             />
             <div className="min-w-0 flex-1 leading-tight">
               <p className="truncate text-xs font-medium capitalize">
-                {provider === "nvidia" ? "NVIDIA NIM" : "Ollama (local)"}
+                {provider === "nvidia"
+                  ? "NVIDIA NIM"
+                  : provider === "gemini"
+                    ? "Google Gemini"
+                    : "Ollama (local)"}
               </p>
               <p className="truncate text-[11px] text-muted-foreground" title={model}>
                 {modelShort}

@@ -49,6 +49,10 @@ def config() -> dict:
             "model": settings.nvidia_model,
             "configured": bool(settings.nvidia_api_key),
         },
+        "gemini": {
+            "model": settings.gemini_model,
+            "configured": bool(settings.gemini_api_key),
+        },
         "tables": tables,
     }
 

@@ -75,6 +75,7 @@ Ouvrez **http://localhost:3000** et posez votre première question.
 | Provider        | Avantages                                             | Config                                              |
 |-----------------|-------------------------------------------------------|-----------------------------------------------------|
 | **Ollama**      | 100 % local, gratuit, hors-ligne, privé               | `LLM_PROVIDER=ollama`, `OLLAMA_MODEL=...`           |
+| **Gemini**      | Très intelligents, aucun GPU requis                   | `LLM_PROVIDER=gemini` + `GEMINI_API_KEY` (gratuit sur [aistudio.google.com](https://aistudio.google.com/apikey)) |
 | **NVIDIA NIM**  | Modèles 70B de très haute qualité, aucun GPU requis   | `LLM_PROVIDER=nvidia` + `NVIDIA_API_KEY` (gratuit sur [build.nvidia.com](https://build.nvidia.com)) |
 
 ### Modèles Ollama conseillés

@@ -12,6 +12,7 @@ export interface BackendConfig {
   provider: string;
   ollama: { model: string; base_url: string };
   nvidia: { model: string; configured: boolean };
+  gemini: { model: string; configured: boolean };
   tables: TableInfo[];
 }
 

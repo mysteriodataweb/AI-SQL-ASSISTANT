@@ -53,7 +53,13 @@ export default function Chat() {
       .then((cfg) => {
         setBackendOnline(true);
         setProvider(cfg.provider);
-        setModel(cfg.provider === "nvidia" ? cfg.nvidia.model : cfg.ollama.model);
+        setModel(
+          cfg.provider === "nvidia"
+            ? cfg.nvidia.model
+            : cfg.provider === "gemini"
+              ? cfg.gemini.model
+              : cfg.ollama.model,
+        );
         setTables(cfg.tables.map((t) => t.name));
       })
       .catch(() => {

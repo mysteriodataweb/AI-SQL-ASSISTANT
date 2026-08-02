@@ -6,8 +6,75 @@ from typing import Iterator
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.config import get_settings
-from app.llm import get_chat_model
+from app.llm import build_fallback_providers, get_chat_model
 from app.schema import schema_for_prompt
+
+CONVERSATIONAL_RE = re.compile(
+    r"^\s*(bonjour|bonsoir|salut|hello|hi|hey|coucou|merci|thanks|thank you|ok|okay|"
+    r"parfait|super|genial|génial|bravo|bien reçu|compris|entendu|très bien|d accord|"
+    r"d'accord|ouais|oui merci|au revoir|bye|à bientôt|bonne journée|bonne soirée|a demain)"
+    r"[\s!?.…]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    text = str(exc)
+    return any(
+        token in text.upper()
+        for token in ("RESOURCE_EXHAUSTED", "RATE_LIMIT", "QUOTA", "429")
+    )
+
+
+class FallbackModel:
+    """Wraps several providers; retries the next one on quota/rate-limit errors."""
+
+    def __init__(self, providers: list[tuple[str, object, str]]):
+        self.providers = providers
+        self._active = 0
+        self.name, self.model_name = providers[0][0], providers[0][2]
+
+    def _attempt(self, fn):
+        last_error: Exception | None = None
+        for i in range(self._active, len(self.providers)):
+            name, model, model_name = self.providers[i]
+            try:
+                result = fn(model)
+                self._active = i
+                self.name, self.model_name = name, model_name
+                return result
+            except Exception as exc:
+                if not _is_quota_error(exc):
+                    raise
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No LLM provider available")
+
+    def invoke(self, messages):
+        return self._attempt(lambda m: m.invoke(messages))
+
+    def stream(self, messages) -> Iterator:
+        last_error: Exception | None = None
+        for i in range(self._active, len(self.providers)):
+            name, model, model_name = self.providers[i]
+            try:
+                stream = model.stream(messages)
+                first = next(stream)
+                self._active = i
+                self.name, self.model_name = name, model_name
+                yield first
+                yield from stream
+                return
+            except StopIteration:
+                return
+            except Exception as exc:
+                if not _is_quota_error(exc):
+                    raise
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No LLM provider available")
 
 SQL_SYSTEM = """You are an expert SQLite analyst. Given a database schema and a question in natural \
 language, you generate the exact SQL query that answers it.
@@ -55,6 +122,30 @@ SQL:
 
 RESULTS:
 {results}
+"""
+
+INTENT_SYSTEM = """You are the router of a data assistant that can query a SQLite database.
+Your ONLY job: decide whether the user's LATEST message asks for DATA or not.
+
+Reply with exactly one word: DATA or CHAT.
+
+- DATA = the user asks a question whose answer must be looked up in the database
+  (products, orders, customers, revenue, counts, comparisons, trends...).
+- CHAT = everything else: greetings, thanks, acknowledgment ("merci", "parfait",
+  "bien reçu", "ok"), follow-up comments on the previous answer, small talk,
+  questions about the assistant itself, or any message that is NOT a data request.
+
+Recent messages:
+{history}
+
+Latest user message: {question}
+"""
+
+CONVERSATION_SYSTEM = """You are a friendly data analyst assistant for a company's SQLite sales database.
+The user just greeted you, thanked you, or made a comment — respond naturally and briefly,
+in the same language as the user.
+Never invent data or numbers. If the user seems to want data, invite them to ask a
+question about the database.
 """
 
 
@@ -121,9 +212,10 @@ def _to_messages(question: str, history: list[dict]) -> list:
     return messages
 
 
-def generate_sql(question: str, history: list[dict]) -> str:
+def generate_sql(question: str, history: list[dict], model: object | None = None) -> str:
     """Step 1 + 2: turn the question into a validated SQL query, with one retry on error."""
-    model, _, _ = get_chat_model()
+    if model is None:
+        model, _, _ = get_chat_model()
     settings = get_settings()
     system = SQL_SYSTEM.format(schema=schema_for_prompt())
     messages = [SystemMessage(content=system)] + _to_messages(question, history)
@@ -156,17 +248,64 @@ def _answer_chain(model):
     return run
 
 
+def classify_intent(model, question: str, history: list[dict]) -> str:
+    """Decide whether the user message is a DATA request or a conversational CHAT message."""
+    if CONVERSATIONAL_RE.match(question.strip()):
+        return "chat"
+    history_text = "\n".join(
+        f"{item.get('role')}: {item.get('content', '')}" for item in history[-4:] if item.get("content")
+    )
+    system = INTENT_SYSTEM.format(history=history_text or "(aucun message précédent)", question=question)
+    try:
+        response = model.invoke(
+            [SystemMessage(content=system), HumanMessage(content=question)]
+        )
+        content = response.content
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part) for part in content
+            )
+        answer = str(content).strip().upper()
+        return "data" if answer.startswith("DATA") else "chat"
+    except Exception:
+        return "data"
+
+
+def _conversation_stream(model, question: str, history: list[dict]) -> Iterator:
+    messages = [SystemMessage(content=CONVERSATION_SYSTEM)]
+    for item in history[-6:]:
+        role = item.get("role")
+        content = item.get("content", "")
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        elif role == "assistant":
+            messages.append(AIMessage(content=content))
+    messages.append(HumanMessage(content=question))
+    return model.stream(messages)
+
+
 def chat_stream(question: str, history: list[dict]) -> Iterator[str]:
     """Full pipeline with SSE events: sql -> status -> answer tokens -> done."""
-    model, provider, model_name = get_chat_model()
+    model = FallbackModel(build_fallback_providers())
 
     def event(name: str, data: dict) -> str:
         return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-    yield event("meta", {"provider": provider, "model": model_name})
+    yield event("meta", {"provider": model.name, "model": model.model_name})
+
+    if classify_intent(model, question, history) != "data":
+        try:
+            for chunk in _conversation_stream(model, question, history):
+                text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                if text:
+                    yield event("token", {"delta": text})
+        except Exception as exc:
+            yield event("error", {"message": f"Erreur lors de la réponse : {exc}"})
+        yield event("done", {})
+        return
 
     try:
-        sql = generate_sql(question, history)
+        sql = generate_sql(question, history, model=model)
     except Exception as exc:
         yield event("error", {"message": f"Impossible de générer la requête SQL : {exc}"})
         return
