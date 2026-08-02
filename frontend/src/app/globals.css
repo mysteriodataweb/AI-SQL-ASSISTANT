@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 12%;
+    --primary: 0 0% 12%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 93%;
+    --accent-foreground: 0 0% 12%;
+    --destructive: 0 0% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 88%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 0 0% 6%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 96%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 8%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 0% 75%;
+    --destructive-foreground: 0 0% 10%;
+    --border: 0 0% 16%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .markdown-body {
+    @apply text-[0.9375rem] leading-7 text-foreground;
+  }
+
+  .markdown-body p {
+    @apply my-2;
+  }
+
+  .markdown-body strong {
+    @apply font-semibold;
+  }
+
+  .markdown-body ul {
+    @apply my-2 list-disc pl-5 space-y-1;
+  }
+
+  .markdown-body ol {
+    @apply my-2 list-decimal pl-5 space-y-1;
+  }
+
+  .markdown-body li {
+    @apply my-1;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3 {
+    @apply font-semibold mt-4 mb-2 text-foreground;
+  }
+
+  .markdown-body h1 {
+    @apply text-lg;
+  }
+
+  .markdown-body h2 {
+    @apply text-base;
+  }
+
+  .markdown-body h3 {
+    @apply text-sm;
+  }
+
+  .markdown-body a {
+    @apply text-primary underline underline-offset-2;
+  }
+
+  .markdown-body blockquote {
+    @apply border-l-2 border-border pl-3 my-2 text-muted-foreground italic;
+  }
+
+  .markdown-body code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.8em] text-primary;
+  }
+
+  .markdown-body pre {
+    @apply my-3 overflow-x-auto rounded-lg bg-muted p-3 text-[0.8rem];
+  }
+
+  .markdown-body pre code {
+    @apply bg-transparent p-0 text-foreground;
+  }
+
+  .markdown-body table {
+    @apply my-3 w-full border-collapse text-sm;
+  }
+
+  .markdown-body th,
+  .markdown-body td {
+    @apply border border-border px-3 py-1.5 text-left;
+  }
+
+  .markdown-body th {
+    @apply bg-muted font-semibold;
+  }
+}
+
+/* Custom scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
